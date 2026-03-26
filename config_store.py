@@ -118,3 +118,74 @@ def detect_mt5_path() -> str | None:
                 return str(d / "MQL5" / "Files")
 
     return None
+
+
+def install_ea() -> list[str]:
+    """Auto-install AuroraX_Copier EA into all detected MT5 Experts folders.
+
+    Copies .mq5 and .mq4 files from the bundled ea/ directory.
+    Returns list of paths where EAs were installed.
+    """
+    if sys.platform != "win32":
+        logger.info("EA auto-install only available on Windows")
+        return []
+
+    # Find EA source files (bundled alongside agent)
+    # When running as .exe, files are in sys._MEIPASS (PyInstaller temp dir)
+    # When running as .py, files are relative to this file
+    if getattr(sys, 'frozen', False):
+        ea_source_dir = Path(sys._MEIPASS) / "ea"
+    else:
+        ea_source_dir = Path(__file__).parent / "ea"
+
+    if not ea_source_dir.exists():
+        logger.warning(f"EA source directory not found: {ea_source_dir}")
+        return []
+
+    ea_files = list(ea_source_dir.glob("AuroraX_Copier.*"))
+    if not ea_files:
+        logger.warning("No EA files found to install")
+        return []
+
+    installed = []
+    terminals_dir = Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal"
+    if not terminals_dir.exists():
+        logger.warning(f"MT5 terminals directory not found: {terminals_dir}")
+        return []
+
+    for terminal in terminals_dir.iterdir():
+        if not terminal.is_dir():
+            continue
+
+        # Install MQ5 EA
+        experts_dir = terminal / "MQL5" / "Experts"
+        if experts_dir.exists():
+            for ea in ea_files:
+                if ea.suffix == ".mq5":
+                    dest = experts_dir / ea.name
+                    if not dest.exists() or dest.read_bytes() != ea.read_bytes():
+                        import shutil
+                        shutil.copy2(ea, dest)
+                        installed.append(str(dest))
+                        logger.info(f"EA installed: {dest}")
+                    else:
+                        logger.info(f"EA already up to date: {dest}")
+
+        # Install MQ4 EA
+        experts_dir_mq4 = terminal / "MQL4" / "Experts"
+        if experts_dir_mq4.exists():
+            for ea in ea_files:
+                if ea.suffix == ".mq4":
+                    dest = experts_dir_mq4 / ea.name
+                    if not dest.exists() or dest.read_bytes() != ea.read_bytes():
+                        import shutil
+                        shutil.copy2(ea, dest)
+                        installed.append(str(dest))
+                        logger.info(f"EA installed: {dest}")
+
+    if installed:
+        logger.info(f"EA installed to {len(installed)} location(s)")
+    else:
+        logger.info("No MT5 Experts folders found — install EA manually")
+
+    return installed

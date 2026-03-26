@@ -16,7 +16,7 @@ import logging
 import signal
 import sys
 
-from config_store import load_config, save_config, detect_mt5_path
+from config_store import load_config, save_config, detect_mt5_path, install_ea
 from auth_manager import AuthManager
 from signal_receiver import SignalReceiver
 from mt5_writer import MT5Writer
@@ -79,6 +79,12 @@ async def main():
         else:
             logger.warning("MT5 path not found. Use --mt5-path to set manually.")
             logger.warning("Signals will be received but NOT written to MT5.")
+
+    # ── Step 2b: Auto-install EA into MT5 Experts folder ────────────────
+    ea_paths = install_ea()
+    if ea_paths:
+        logger.info(f"EA auto-installed to {len(ea_paths)} terminal(s)")
+        logger.info("Open MT5 → drag AuroraX_Copier onto any chart to activate")
 
     # ── Step 3: Initialize components ─────────────────────────────────────
     receiver = SignalReceiver(config.token, config.api_url, config.poll_interval_seconds)
