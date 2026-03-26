@@ -57,7 +57,7 @@ async def main():
         save_config(config)
 
     logger.info("═" * 50)
-    logger.info("  Aurora Bridge Agent v1.4")
+    logger.info("  Aurora Bridge Agent v1.5.1")
     logger.info("═" * 50)
     logger.info(f"API: {config.api_url}")
 
