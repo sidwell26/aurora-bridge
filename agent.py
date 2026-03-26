@@ -66,20 +66,25 @@ async def main():
         save_config(config)
         logger.info("Token set via --token flag")
     elif args.setup or not config.token:
-        # Interactive: prompt for token or try OAuth
-        logger.info("No API key found. You can get one from Aurora X → Strategy Builder → Trader tab.")
-        logger.info("")
-        token_input = input("Paste your Bridge API Key (or press Enter for browser login): ").strip()
-        if token_input:
-            config.token = token_input
-            save_config(config)
-            logger.info("Token saved!")
-        else:
+        # Try interactive prompt first, fall back to OAuth if no stdin (windowed mode)
+        try:
+            logger.info("No API key found. Get one from Aurora X → Strategy Builder → Trader tab.")
+            logger.info("")
+            token_input = input("Paste your Bridge API Key (or press Enter for browser login): ").strip()
+            if token_input:
+                config.token = token_input
+                save_config(config)
+                logger.info("Token saved!")
+            else:
+                raise EOFError()  # trigger browser flow
+        except (EOFError, RuntimeError, OSError):
+            # No stdin available (windowed .exe) — try browser OAuth
             logger.info("Opening browser for authentication...")
             auth = AuthManager(config.api_url)
             token = await auth.authenticate()
             if not token:
-                logger.error("Authentication failed. Try again with: AuroraBridge.exe --token YOUR_API_KEY")
+                logger.error("Authentication failed. Run from command line with:")
+                logger.error("  AuroraBridge.exe --token YOUR_API_KEY")
                 sys.exit(1)
             config.token = token
             save_config(config)

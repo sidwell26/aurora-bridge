@@ -19,7 +19,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Build .exe with PyInstaller
-        run: pyinstaller --onefile --windowed --name=AuroraBridge agent.py
+        run: pyinstaller --onefile --console --name=AuroraBridge --add-data "ea;ea" agent.py
 
       - name: Upload .exe artifact
         uses: actions/upload-artifact@v4
