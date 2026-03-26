@@ -56,7 +56,7 @@ async def main():
         config.mt5_signal_file = args.mt5_path
 
     logger.info("═" * 50)
-    logger.info("  Aurora Bridge Agent v1.3")
+    logger.info("  Aurora Bridge Agent v1.4")
     logger.info("═" * 50)
     logger.info(f"API: {config.api_url}")
 

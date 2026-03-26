@@ -70,7 +70,7 @@ Replace `YOUR_API_KEY_HERE` with the key you copied in Step 2.
 You should see:
 
 ```
-Aurora Bridge Agent v1.3
+Aurora Bridge Agent v1.4
 API: https://...
 Token saved!
 MT5 path auto-detected: ...
