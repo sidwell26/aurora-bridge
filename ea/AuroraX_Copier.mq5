@@ -2,8 +2,8 @@
 //| AuroraX_Copier.mq5                                               |
 //| Aurora X Trade Copier EA                                          |
 //|                                                                    |
-//| Reads signals.csv from MQL5/Files/ and executes trades.           |
-//| The Python copier.py writes to this file when alerts arrive.      |
+//| Reads signals.csv from Common/Files/ and executes trades.         |
+//| The Python bridge agent writes to this file when alerts arrive.   |
 //|                                                                    |
 //| YOU are responsible for your own trading decisions.                |
 //| This tool is provided as-is with no guarantees.                   |
@@ -14,7 +14,7 @@
 
 // ─── Inputs ──────────────────────────────────────────────────────────────────
 
-input string   SignalFile       = "signals.csv";    // Signal file name (in MQL5/Files/)
+input string   SignalFile       = "signals.csv";    // Signal file name (in Common/Files/)
 input double   RiskPercent      = 1.0;              // Risk % per trade (override)
 input double   MaxRiskReward    = 0;                // Max R:R to accept (0 = use signal value)
 input int      MaxSlippage      = 3;                // Max slippage in points
@@ -63,10 +63,10 @@ void OnTimer()
 //+------------------------------------------------------------------+
 void CheckSignals()
 {
-   if(!FileIsExist(SignalFile))
+   if(!FileIsExist(SignalFile, FILE_COMMON))
       return;
 
-   int handle = FileOpen(SignalFile, FILE_READ | FILE_CSV | FILE_ANSI, ',');
+   int handle = FileOpen(SignalFile, FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON);
    if(handle == INVALID_HANDLE)
       return;
 
@@ -166,7 +166,7 @@ void CheckSignals()
    // Rewrite file with updated statuses
    if(hasUnprocessed)
    {
-      int wHandle = FileOpen(SignalFile, FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+      int wHandle = FileOpen(SignalFile, FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
       if(wHandle != INVALID_HANDLE)
       {
          for(int i = 0; i < lineCount; i++)
