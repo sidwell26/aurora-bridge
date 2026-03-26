@@ -47,7 +47,7 @@ class MT5Config(BaseModel):
 
 class AgentConfig(BaseModel):
     """Bridge Agent configuration."""
-    api_url: str = ""
+    api_url: str = "https://market-analysis-backend-9rg3.onrender.com"
     token: Optional[str] = None
     mt5_signal_file: Optional[str] = None       # auto-detected or manual
     mt5_result_file: Optional[str] = None       # auto-detected or manual

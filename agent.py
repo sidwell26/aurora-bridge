@@ -55,12 +55,8 @@ async def main():
     if args.mt5_path:
         config.mt5_signal_file = args.mt5_path
 
-    if not config.api_url:
-        logger.error("No API URL configured. Run with: AuroraBridge.exe --api-url https://your-backend-url.com")
-        sys.exit(1)
-
     logger.info("═" * 50)
-    logger.info("  Aurora Bridge Agent v1.0")
+    logger.info("  Aurora Bridge Agent v1.3")
     logger.info("═" * 50)
     logger.info(f"API: {config.api_url}")
 
