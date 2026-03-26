@@ -99,8 +99,8 @@ void CheckSignals()
       string fields[];
       StringSplit(lines[i], ',', fields);
 
-      // Expected: timestamp,pair,direction,sl_method,sl_value,sl_multiplier,min_sl_pips,risk_reward,risk_pct,status
-      if(ArraySize(fields) < 10)
+      // Expected: timestamp,pair,direction,sl_method,sl_value,sl_multiplier,min_sl_pips,risk_reward,risk_pct,status,signal_id,action
+      if(ArraySize(fields) < 12)
       {
          updatedLines[i] = lines[i];
          continue;
@@ -157,8 +157,12 @@ void CheckSignals()
       // Calculate TP from R:R
       double tpPips = slPips * rr;
 
+      string signalId = fields[10];
+      StringTrimRight(signalId);
+      StringTrimLeft(signalId);
+
       // Execute
-      bool success = ExecuteTrade(symbol, direction, slPips, tpPips, riskPct);
+      bool success = ExecuteTrade(symbol, direction, slPips, tpPips, riskPct, signalId);
       fields[9] = success ? "EXECUTED" : "FAILED";
       updatedLines[i] = JoinFields(fields);
    }
@@ -340,7 +344,7 @@ double CalculateLots(string symbol, double slPips, double riskPct)
 //+------------------------------------------------------------------+
 //| Execute a trade                                                    |
 //+------------------------------------------------------------------+
-bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips, double riskPct)
+bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips, double riskPct, string signal_id = "")
 {
    ENUM_ORDER_TYPE orderType;
    double price, sl, tp;
@@ -398,6 +402,17 @@ bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips,
    Print("Order executed: ", symbol, " ", direction, " ", lots, " lots",
          " SL=", NormalizeDouble(sl, digits), " TP=", NormalizeDouble(tp, digits),
          " Ticket=", result.order);
+
+   // Write ticket to a file the bridge agent can read
+   string ticketFile = "last_ticket.csv";
+   int tHandle = FileOpen(ticketFile, FILE_WRITE | FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON);
+   if(tHandle != INVALID_HANDLE)
+   {
+      FileSeek(tHandle, 0, SEEK_END);
+      FileWriteString(tHandle, signal_id + "," + IntegerToString(result.order) + "\n");
+      FileClose(tHandle);
+   }
+
    return true;
 }
 
