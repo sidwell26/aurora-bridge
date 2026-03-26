@@ -1,0 +1,39 @@
+name: Build and Upload Release
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build exe
+        run: |
+          pyinstaller --onefile --add-data "ea;ea" --name AuroraBridge agent.py
+
+      - name: Create release zip
+        run: |
+          mkdir AuroraBridge
+          copy dist\AuroraBridge.exe AuroraBridge\
+          copy ea\AuroraX_Copier.mq5 AuroraBridge\
+          copy ea\AuroraX_Copier.ex5 AuroraBridge\
+          powershell Compress-Archive -Path AuroraBridge\* -DestinationPath AuroraBridge.zip -Force
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.event.release.tag_name || 'v1.5.0' }} AuroraBridge.zip --clobber
