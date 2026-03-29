@@ -24,8 +24,14 @@ class Signal(BaseModel):
     riskPercent: Optional[float] = None
     status: str = "pending"
     createdAt: Optional[str] = None
-    type: Optional[str] = None          # test_connection, test_trade, or None (normal trade)
-    mt5ConfigId: Optional[str] = None   # which MT5 account to target
+    type: Optional[str] = None              # test_connection, test_trade, or None (from SSE)
+    signalType: Optional[str] = None       # same as type (from DB polling — column name is signal_type)
+    mt5ConfigId: Optional[str] = None      # which MT5 account to target
+
+    @property
+    def effective_type(self) -> Optional[str]:
+        """Return signal type from either SSE (type) or DB polling (signalType/signal_type)."""
+        return self.type or self.signalType
 
 
 class ExecutionResult(BaseModel):

@@ -175,7 +175,7 @@ async def main():
             logger.info(f"{'─' * 40}")
 
             # Handle test signals — respond immediately without touching MT5
-            if s.type == "test_connection":
+            if s.effective_type == "test_connection":
                 logger.info(f"TEST CONNECTION: {s.id[:12]}...")
                 mt5_ok = writer is not None
                 if mt5_ok:
@@ -186,7 +186,7 @@ async def main():
                     logger.warning("  ✗ MT5 path not configured")
                 continue
 
-            if s.type == "test_trade":
+            if s.effective_type == "test_trade":
                 logger.info(f"TEST TRADE: {s.pair} {s.direction} {s.lotSize} lots — {s.id[:12]}...")
                 if writer:
                     written = writer.write(s)
