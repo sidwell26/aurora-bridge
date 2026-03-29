@@ -109,7 +109,7 @@ void CheckSignals()
 
       Print("DEBUG: Line ", i, " has ", ArraySize(fields), " fields, status=", (ArraySize(fields) >= 10 ? fields[9] : "N/A"));
 
-      // Expected: timestamp,pair,direction,sl_method,sl_value,sl_multiplier,min_sl_pips,risk_reward,risk_pct,status,signal_id,action
+      // Expected: timestamp,pair,direction,sl_method,sl_value,sl_multiplier,min_sl_pips,risk_reward,risk_pct,status,signal_id,action[,max_trades]
       if(ArraySize(fields) < 12)
       {
          Print("DEBUG: Skipping line ", i, " — only ", ArraySize(fields), " fields (need 12)");
@@ -155,10 +155,16 @@ void CheckSignals()
          continue;
       }
 
-      // Check per-pair trade limit
-      if(MaxTradesPerPair > 0 && CountOpenTrades(symbol) >= MaxTradesPerPair)
+      // Check per-pair trade limit (use signal value if present, else EA input)
+      int maxTrades = MaxTradesPerPair;
+      if(ArraySize(fields) >= 13 && StringLen(fields[12]) > 0)
       {
-         Print("Max trades per pair reached for ", symbol, " (", MaxTradesPerPair, ")");
+         int signalMax = (int)StringToInteger(fields[12]);
+         if(signalMax > 0) maxTrades = signalMax;
+      }
+      if(maxTrades > 0 && CountOpenTrades(symbol) >= maxTrades)
+      {
+         Print("Max trades per pair reached for ", symbol, " (", maxTrades, ")");
          fields[9] = "MAX_PER_PAIR";
          updatedLines[i] = JoinFields(fields);
          continue;

@@ -20,7 +20,7 @@ logger = logging.getLogger("aurora-bridge")
 CSV_HEADER = [
     "timestamp", "pair", "direction", "sl_method", "sl_value",
     "sl_multiplier", "min_sl_pips", "risk_reward", "risk_pct",
-    "status", "signal_id", "action",
+    "status", "signal_id", "action", "max_trades",
 ]
 
 
@@ -83,6 +83,7 @@ class MT5Writer:
                     "PENDING",                       # EA will update this
                     signal.id,
                     signal.action or "OPEN",
+                    signal.maxOpenTrades or "",
                 ])
 
             logger.info(f"Signal written → {signal.pair} {signal.direction} ({signal.id[:8]})")

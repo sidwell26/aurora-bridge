@@ -24,6 +24,7 @@ class Signal(BaseModel):
     riskPercent: Optional[float] = None
     status: str = "pending"
     createdAt: Optional[str] = None
+    maxOpenTrades: Optional[int] = None      # max open positions per symbol (from strategy config)
     type: Optional[str] = None              # test_connection, test_trade, or None (from SSE)
     signalType: Optional[str] = None       # same as type (from DB polling — column name is signal_type)
     mt5ConfigId: Optional[str] = None      # which MT5 account to target
