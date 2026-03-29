@@ -226,8 +226,8 @@ string FindSymbol(string pair)
    if(SymbolSelect(pair, true))
       return pair;
 
-   // Try common suffixes
-   string suffixes[] = {".raw", ".pro", ".ecn", ".std", ".m", ".i", "_"};
+   // Try common suffixes (covers most brokers)
+   string suffixes[] = {"p", ".raw", ".pro", ".ecn", ".std", ".m", ".i", "_", "m", ".r", ".z", "-ECN", ".stp"};
    for(int i = 0; i < ArraySize(suffixes); i++)
    {
       string test = pair + suffixes[i];
