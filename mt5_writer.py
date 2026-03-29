@@ -20,7 +20,7 @@ logger = logging.getLogger("aurora-bridge")
 CSV_HEADER = [
     "timestamp", "pair", "direction", "sl_method", "sl_value",
     "sl_multiplier", "min_sl_pips", "risk_reward", "risk_pct",
-    "status", "signal_id", "action", "max_trades",
+    "status", "signal_id", "action", "max_trades", "magic",
 ]
 
 
@@ -70,6 +70,14 @@ class MT5Writer:
                 if not file_exists or os.path.getsize(self.signal_file) == 0:
                     writer.writerow(CSV_HEADER)
 
+                # Generate a stable magic number from alertId (first 8 hex chars → int)
+                magic = ""
+                if signal.alertId and signal.alertId != "00000000-0000-0000-0000-000000000000":
+                    try:
+                        magic = str(int(signal.alertId.replace("-", "")[:8], 16) % 2000000000)
+                    except (ValueError, TypeError):
+                        magic = ""
+
                 writer.writerow([
                     datetime.now(timezone.utc).isoformat(),
                     signal.pair,
@@ -84,6 +92,7 @@ class MT5Writer:
                     signal.id,
                     signal.action or "OPEN",
                     signal.maxOpenTrades or "",
+                    magic,
                 ])
 
             logger.info(f"Signal written → {signal.pair} {signal.direction} ({signal.id[:8]})")

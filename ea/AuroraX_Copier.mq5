@@ -155,6 +155,14 @@ void CheckSignals()
          continue;
       }
 
+      // Per-signal magic number (unique per strategy/alert)
+      int signalMagic = MagicNumber;
+      if(ArraySize(fields) >= 14 && StringLen(fields[13]) > 0)
+      {
+         int parsed = (int)StringToInteger(fields[13]);
+         if(parsed > 0) signalMagic = parsed;
+      }
+
       // Check per-pair trade limit (use signal value if present, else EA input)
       int maxTrades = MaxTradesPerPair;
       if(ArraySize(fields) >= 13 && StringLen(fields[12]) > 0)
@@ -162,7 +170,7 @@ void CheckSignals()
          int signalMax = (int)StringToInteger(fields[12]);
          if(signalMax > 0) maxTrades = signalMax;
       }
-      if(maxTrades > 0 && CountOpenTrades(symbol) >= maxTrades)
+      if(maxTrades > 0 && CountOpenTradesWithMagic(symbol, signalMagic) >= maxTrades)
       {
          Print("Max trades per pair reached for ", symbol, " (", maxTrades, ")");
          fields[9] = "MAX_PER_PAIR";
@@ -187,7 +195,7 @@ void CheckSignals()
       StringTrimLeft(signalId);
 
       // Execute
-      bool success = ExecuteTrade(symbol, direction, slPips, tpPips, riskPct, signalId);
+      bool success = ExecuteTrade(symbol, direction, slPips, tpPips, riskPct, signalId, signalMagic);
       fields[9] = success ? "EXECUTED" : "FAILED";
       updatedLines[i] = JoinFields(fields);
    }
@@ -206,9 +214,9 @@ void CheckSignals()
 }
 
 //+------------------------------------------------------------------+
-//| Count open trades for a symbol with our magic number              |
+//| Count open trades for a symbol with a specific magic number       |
 //+------------------------------------------------------------------+
-int CountOpenTrades(string symbol)
+int CountOpenTradesWithMagic(string symbol, int magic)
 {
    int count = 0;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
@@ -216,7 +224,7 @@ int CountOpenTrades(string symbol)
       if(PositionGetTicket(i) > 0)
       {
          if(PositionGetString(POSITION_SYMBOL) == symbol &&
-            PositionGetInteger(POSITION_MAGIC) == MagicNumber)
+            PositionGetInteger(POSITION_MAGIC) == magic)
             count++;
       }
    }
@@ -369,7 +377,7 @@ double CalculateLots(string symbol, double slPips, double riskPct)
 //+------------------------------------------------------------------+
 //| Execute a trade                                                    |
 //+------------------------------------------------------------------+
-bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips, double riskPct, string signal_id = "")
+bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips, double riskPct, string signal_id = "", int magic = 0)
 {
    ENUM_ORDER_TYPE orderType;
    double price, sl, tp;
@@ -426,7 +434,7 @@ bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips,
    request.sl        = sl > 0 ? NormalizeDouble(sl, digits) : 0;
    request.tp        = tp > 0 ? NormalizeDouble(tp, digits) : 0;
    request.deviation = MaxSlippage;
-   request.magic     = MagicNumber;
+   request.magic     = magic > 0 ? magic : MagicNumber;
    request.comment   = "AuroraX";
 
    if(!OrderSend(request, result))
