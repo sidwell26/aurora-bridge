@@ -15,7 +15,7 @@
 // ─── Inputs ──────────────────────────────────────────────────────────────────
 
 input string   SignalFile       = "signals.csv";    // Signal file name (in Common/Files/)
-input double   RiskPercent      = 1.0;              // Risk % per trade (override)
+input double   RiskPercent      = 0;                // Risk % override (0 = use signal value)
 input double   MaxRiskReward    = 0;                // Max R:R to accept (0 = use signal value)
 input int      MaxSlippage      = 3;                // Max slippage in points
 input int      MagicNumber      = 202603;           // EA magic number
