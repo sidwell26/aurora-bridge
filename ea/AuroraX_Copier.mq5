@@ -164,13 +164,17 @@ void CheckSignals()
          continue;
       }
 
-      // Calculate SL in pips
-      double slPips = CalculateSLPips(symbol, slMethod, slValue, slMult, minSlPips, direction);
-      Print("DEBUG: SL pips=", slPips, " (method=", slMethod, " value=", slValue, " mult=", slMult, ")");
-      if(slPips <= 0) slPips = DefaultSLPips;
+      // Calculate SL in pips (0 = no SL)
+      double slPips = 0;
+      if(slMethod != "" && slMethod != "NONE")
+      {
+         slPips = CalculateSLPips(symbol, slMethod, slValue, slMult, minSlPips, direction);
+         Print("DEBUG: SL pips=", slPips, " (method=", slMethod, " value=", slValue, " mult=", slMult, ")");
+         if(slPips <= 0 && AutoCalculateSL) slPips = DefaultSLPips;
+      }
 
-      // Calculate TP from R:R
-      double tpPips = slPips * rr;
+      // Calculate TP from R:R (0 = no TP)
+      double tpPips = (slPips > 0 && rr > 0) ? slPips * rr : 0;
 
       string signalId = fields[10];
       StringTrimRight(signalId);
@@ -371,15 +375,15 @@ bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips,
    {
       orderType = ORDER_TYPE_BUY;
       price = SymbolInfoDouble(symbol, SYMBOL_ASK);
-      sl = price - slPips * pipSize;
-      tp = price + tpPips * pipSize;
+      sl = slPips > 0 ? price - slPips * pipSize : 0;
+      tp = tpPips > 0 ? price + tpPips * pipSize : 0;
    }
    else if(direction == "SELL")
    {
       orderType = ORDER_TYPE_SELL;
       price = SymbolInfoDouble(symbol, SYMBOL_BID);
-      sl = price + slPips * pipSize;
-      tp = price - tpPips * pipSize;
+      sl = slPips > 0 ? price + slPips * pipSize : 0;
+      tp = tpPips > 0 ? price - tpPips * pipSize : 0;
    }
    else
    {
@@ -387,12 +391,23 @@ bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips,
       return false;
    }
 
-   double lots = CalculateLots(symbol, slPips, riskPct);
+   // Lot sizing: use risk-based if SL and risk% are set, otherwise use min lot
+   double lots;
+   if(slPips > 0 && riskPct > 0)
+   {
+      lots = CalculateLots(symbol, slPips, riskPct);
+   }
+   else
+   {
+      lots = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   }
    if(lots <= 0)
    {
       Print("Lot size calculation failed for ", symbol);
       return false;
    }
+
+   Print("DEBUG: Executing ", direction, " ", lots, " lots ", symbol, " @ ", price, " SL=", sl, " TP=", tp);
 
    MqlTradeRequest request = {};
    MqlTradeResult  result  = {};
@@ -402,8 +417,8 @@ bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips,
    request.volume    = lots;
    request.type      = orderType;
    request.price     = price;
-   request.sl        = NormalizeDouble(sl, digits);
-   request.tp        = NormalizeDouble(tp, digits);
+   request.sl        = sl > 0 ? NormalizeDouble(sl, digits) : 0;
+   request.tp        = tp > 0 ? NormalizeDouble(tp, digits) : 0;
    request.deviation = MaxSlippage;
    request.magic     = MagicNumber;
    request.comment   = "AuroraX";
