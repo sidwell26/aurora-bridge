@@ -64,11 +64,17 @@ void OnTimer()
 void CheckSignals()
 {
    if(!FileIsExist(SignalFile, FILE_COMMON))
+   {
+      Print("DEBUG: signals.csv not found");
       return;
+   }
 
-   int handle = FileOpen(SignalFile, FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON);
+   int handle = FileOpen(SignalFile, FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ);
    if(handle == INVALID_HANDLE)
+   {
+      Print("DEBUG: Failed to open signals.csv, error=", GetLastError());
       return;
+   }
 
    string lines[];
    int lineCount = 0;
@@ -87,6 +93,8 @@ void CheckSignals()
    }
    FileClose(handle);
 
+   Print("DEBUG: Read ", lineCount, " lines from signals.csv");
+
    if(lineCount < 2) return;  // Header only or empty
 
    // Process each line (skip header)
@@ -99,9 +107,12 @@ void CheckSignals()
       string fields[];
       StringSplit(lines[i], ',', fields);
 
+      Print("DEBUG: Line ", i, " has ", ArraySize(fields), " fields, status=", (ArraySize(fields) >= 10 ? fields[9] : "N/A"));
+
       // Expected: timestamp,pair,direction,sl_method,sl_value,sl_multiplier,min_sl_pips,risk_reward,risk_pct,status,signal_id,action
       if(ArraySize(fields) < 12)
       {
+         Print("DEBUG: Skipping line ", i, " — only ", ArraySize(fields), " fields (need 12)");
          updatedLines[i] = lines[i];
          continue;
       }
@@ -131,8 +142,11 @@ void CheckSignals()
       if(RiskPercent > 0) riskPct = RiskPercent;
       if(MaxRiskReward > 0 && rr > MaxRiskReward) rr = MaxRiskReward;
 
+      Print("DEBUG: Processing signal — pair=", pair, " dir=", direction, " sl_method=", slMethod, " sl_value=", slValue, " rr=", rr, " risk=", riskPct);
+
       // Map pair name to broker symbol (handles suffix like "EURUSD.raw")
       string symbol = FindSymbol(pair);
+      Print("DEBUG: FindSymbol(", pair, ") → ", symbol);
       if(symbol == "")
       {
          Print("Symbol not found for: ", pair);
@@ -152,6 +166,7 @@ void CheckSignals()
 
       // Calculate SL in pips
       double slPips = CalculateSLPips(symbol, slMethod, slValue, slMult, minSlPips, direction);
+      Print("DEBUG: SL pips=", slPips, " (method=", slMethod, " value=", slValue, " mult=", slMult, ")");
       if(slPips <= 0) slPips = DefaultSLPips;
 
       // Calculate TP from R:R
