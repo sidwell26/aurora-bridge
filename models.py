@@ -24,6 +24,8 @@ class Signal(BaseModel):
     riskPercent: Optional[float] = None
     status: str = "pending"
     createdAt: Optional[str] = None
+    type: Optional[str] = None          # test_connection, test_trade, or None (normal trade)
+    mt5ConfigId: Optional[str] = None   # which MT5 account to target
 
 
 class ExecutionResult(BaseModel):

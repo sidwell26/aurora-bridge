@@ -173,6 +173,32 @@ async def main():
                 break
 
             logger.info(f"{'─' * 40}")
+
+            # Handle test signals — respond immediately without touching MT5
+            if s.type == "test_connection":
+                logger.info(f"TEST CONNECTION: {s.id[:12]}...")
+                mt5_ok = writer is not None
+                if mt5_ok:
+                    await receiver.ack(s.id, "executed")
+                    logger.info("  ✓ Agent connected, MT5 path available")
+                else:
+                    await receiver.ack(s.id, "failed", failure_reason="MT5 files path not found")
+                    logger.warning("  ✗ MT5 path not configured")
+                continue
+
+            if s.type == "test_trade":
+                logger.info(f"TEST TRADE: {s.pair} {s.direction} {s.lotSize} lots — {s.id[:12]}...")
+                if writer:
+                    written = writer.write(s)
+                    if written:
+                        await receiver.ack(s.id, "delivered")
+                        logger.info("  ✓ Test trade written to MT5")
+                    else:
+                        await receiver.ack(s.id, "failed", failure_reason="Failed to write test trade to MT5 files")
+                else:
+                    await receiver.ack(s.id, "failed", failure_reason="MT5 files path not found")
+                continue
+
             logger.info(f"SIGNAL: {s.pair} {s.direction} ({s.action})")
             logger.info(f"  ID: {s.id[:12]}...")
             logger.info(f"  SL: {s.slMethod} | R:R {s.riskReward}")
