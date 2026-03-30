@@ -437,6 +437,15 @@ bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips,
    request.magic     = magic > 0 ? magic : MagicNumber;
    request.comment   = "AuroraX";
 
+   // Set filling mode based on what the broker supports
+   long fillMode = SymbolInfoInteger(symbol, SYMBOL_FILLING_MODE);
+   if((fillMode & SYMBOL_FILLING_FOK) != 0)
+      request.type_filling = ORDER_FILLING_FOK;
+   else if((fillMode & SYMBOL_FILLING_IOC) != 0)
+      request.type_filling = ORDER_FILLING_IOC;
+   else
+      request.type_filling = ORDER_FILLING_RETURN;
+
    if(!OrderSend(request, result))
    {
       Print("Order failed: ", result.retcode, " — ", result.comment);
