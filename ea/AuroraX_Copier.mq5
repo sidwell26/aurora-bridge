@@ -22,7 +22,7 @@ input int      MagicNumber      = 202603;           // EA magic number
 input int      PollIntervalMs   = 2000;             // How often to check file (ms)
 input bool     AutoCalculateSL  = true;             // Calculate SL from method params
 input double   DefaultSLPips    = 20;               // Fallback SL if method unknown
-input int      MaxTradesPerPair = 0;                // Max open trades per pair (0 = use signal value)
+input int      MaxTradesPerPair = 1;                // Fallback max trades per pair if signal doesn't specify
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
