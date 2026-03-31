@@ -172,48 +172,58 @@ async def main():
             if shutdown_event.is_set():
                 break
 
-            logger.info(f"{'─' * 40}")
+            # Drain all queued signals first so we batch-write to CSV
+            batch = [s]
+            while not receiver._signal_queue.empty():
+                try:
+                    extra = receiver._signal_queue.get_nowait()
+                    batch.append(extra)
+                except asyncio.QueueEmpty:
+                    break
 
-            # Handle test signals — respond immediately without touching MT5
-            if s.effective_type == "test_connection":
-                logger.info(f"TEST CONNECTION: {s.id[:12]}...")
-                mt5_ok = writer is not None
-                if mt5_ok:
-                    await receiver.ack(s.id, "executed")
-                    logger.info("  ✓ Agent connected, MT5 path available")
-                else:
-                    await receiver.ack(s.id, "failed", failure_reason="MT5 files path not found")
-                    logger.warning("  ✗ MT5 path not configured")
-                continue
+            for sig in batch:
+                logger.info(f"{'─' * 40}")
 
-            if s.effective_type == "test_trade":
-                logger.info(f"TEST TRADE: {s.pair} {s.direction} {s.lotSize} lots — {s.id[:12]}...")
-                if writer:
-                    written = writer.write(s)
-                    if written:
-                        await receiver.ack(s.id, "delivered")
-                        logger.info("  ✓ Test trade written to MT5")
+                # Handle test signals — respond immediately without touching MT5
+                if sig.effective_type == "test_connection":
+                    logger.info(f"TEST CONNECTION: {sig.id[:12]}...")
+                    mt5_ok = writer is not None
+                    if mt5_ok:
+                        await receiver.ack(sig.id, "executed")
+                        logger.info("  ✓ Agent connected, MT5 path available")
                     else:
-                        await receiver.ack(s.id, "failed", failure_reason="Failed to write test trade to MT5 files")
-                else:
-                    await receiver.ack(s.id, "failed", failure_reason="MT5 files path not found")
-                continue
+                        await receiver.ack(sig.id, "failed", failure_reason="MT5 files path not found")
+                        logger.warning("  ✗ MT5 path not configured")
+                    continue
 
-            logger.info(f"SIGNAL: {s.pair} {s.direction} ({s.action})")
-            logger.info(f"  ID: {s.id[:12]}...")
-            logger.info(f"  SL: {s.slMethod} | R:R {s.riskReward}")
+                if sig.effective_type == "test_trade":
+                    logger.info(f"TEST TRADE: {sig.pair} {sig.direction} {sig.lotSize} lots — {sig.id[:12]}...")
+                    if writer:
+                        written = writer.write(sig)
+                        if written:
+                            await receiver.ack(sig.id, "delivered")
+                            logger.info("  ✓ Test trade written to MT5")
+                        else:
+                            await receiver.ack(sig.id, "failed", failure_reason="Failed to write test trade to MT5 files")
+                    else:
+                        await receiver.ack(sig.id, "failed", failure_reason="MT5 files path not found")
+                    continue
 
-            if writer:
-                written = writer.write(s)
-                if written:
-                    await receiver.ack(s.id, "delivered")
-                    health.update_status(HealthStatus.CONNECTED)
+                logger.info(f"SIGNAL: {sig.pair} {sig.direction} ({sig.action})")
+                logger.info(f"  ID: {sig.id[:12]}...")
+                logger.info(f"  SL: {sig.slMethod} | R:R {sig.riskReward}")
+
+                if writer:
+                    written = writer.write(sig)
+                    if written:
+                        await receiver.ack(sig.id, "delivered")
+                        health.update_status(HealthStatus.CONNECTED)
+                    else:
+                        await receiver.ack(sig.id, "failed", failure_reason="Failed to write to MT5 files")
+                        health.update_status(HealthStatus.MT5_ERROR)
                 else:
-                    await receiver.ack(s.id, "failed", failure_reason="Failed to write to MT5 files")
-                    health.update_status(HealthStatus.MT5_ERROR)
-            else:
-                logger.warning("No MT5 path — signal received but not written")
-                await receiver.ack(s.id, "delivered")
+                    logger.warning("No MT5 path — signal received but not written")
+                    await receiver.ack(sig.id, "delivered")
 
     except asyncio.CancelledError:
         pass
