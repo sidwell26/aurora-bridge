@@ -62,3 +62,4 @@ class AgentConfig(BaseModel):
     mt5_result_file: Optional[str] = None       # auto-detected or manual
     poll_interval_seconds: int = 5
     mt5: Optional[MT5Config] = None
+    mt5_config_id: Optional[str] = None         # UUID of this bridge's MT5 config in Aurora X

@@ -45,6 +45,9 @@ async def main():
     parser.add_argument("--token", type=str, help="Bridge API key (from Aurora X → Strategy Builder → Trader tab)")
     parser.add_argument("--mt5-path", type=str, help="Manual path to MT5 Files directory")
     parser.add_argument("--api-url", type=str, help="Aurora API URL override")
+    parser.add_argument("--mt5-config-id", type=str,
+                        help="MT5 config UUID from Aurora X → Trader tab (required when running "
+                             "multiple bridge instances for the same account)")
     args = parser.parse_args()
 
     # Load config
@@ -55,11 +58,18 @@ async def main():
     if args.mt5_path:
         config.mt5_signal_file = args.mt5_path
         save_config(config)
+    if args.mt5_config_id:
+        config.mt5_config_id = args.mt5_config_id
+        save_config(config)
 
     logger.info("═" * 50)
-    logger.info("  Aurora Bridge Agent v1.5.1")
+    logger.info("  Aurora Bridge Agent v1.5.2")
     logger.info("═" * 50)
     logger.info(f"API: {config.api_url}")
+    if config.mt5_config_id:
+        logger.info(f"MT5 config: {config.mt5_config_id} (targeted signals only)")
+    else:
+        logger.info("MT5 config: not set — receiving all broadcast signals")
 
     # ── Step 1: Authentication ────────────────────────────────────────────
     if args.token:
@@ -109,7 +119,8 @@ async def main():
         logger.info("Open MT5 → drag AuroraX_Copier onto any chart to activate")
 
     # ── Step 3: Initialize components ─────────────────────────────────────
-    receiver = SignalReceiver(config.token, config.api_url, config.poll_interval_seconds)
+    receiver = SignalReceiver(config.token, config.api_url, config.poll_interval_seconds,
+                             mt5_config_id=config.mt5_config_id)
     writer = MT5Writer(config.mt5_signal_file) if config.mt5_signal_file else None
     health = HealthMonitor(config.mt5_signal_file)
 

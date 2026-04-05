@@ -21,10 +21,12 @@ logger = logging.getLogger("aurora-bridge")
 class SignalReceiver:
     """Receives signals from Aurora API via SSE + polling fallback."""
 
-    def __init__(self, token: str, api_url: str, poll_interval: int = 5):
+    def __init__(self, token: str, api_url: str, poll_interval: int = 5,
+                 mt5_config_id: str | None = None):
         self.token = token
         self.api_url = api_url.rstrip("/")
         self.poll_interval = poll_interval
+        self.mt5_config_id = mt5_config_id      # this bridge's MT5 config UUID
         self.seen_ids: set[str] = set()
         self._signal_queue: asyncio.Queue[Signal] = asyncio.Queue()
         self._running = False
@@ -32,6 +34,32 @@ class SignalReceiver:
     @property
     def headers(self) -> dict:
         return {"Authorization": f"Bearer {self.token}"}
+
+    def _is_for_this_bridge(self, signal: Signal) -> bool:
+        """Return True if this signal should be executed by this bridge instance.
+
+        Routing rules:
+          - signal.mt5ConfigId is None → broadcast; all bridges execute it.
+          - signal.mt5ConfigId is set AND this bridge has no mt5_config_id → skip
+            (another specific terminal was targeted, we don't know which one we are).
+          - signal.mt5ConfigId is set AND matches this bridge's mt5_config_id → execute.
+          - signal.mt5ConfigId is set AND does NOT match → skip.
+        """
+        if signal.mt5ConfigId is None:
+            return True  # broadcast signal
+        if self.mt5_config_id is None:
+            logger.debug(
+                f"Signal {signal.id[:8]} targets mt5ConfigId={signal.mt5ConfigId[:8]} "
+                f"but this bridge has no mt5_config_id configured — skipping"
+            )
+            return False
+        match = signal.mt5ConfigId == self.mt5_config_id
+        if not match:
+            logger.debug(
+                f"Signal {signal.id[:8]} targets {signal.mt5ConfigId[:8]}, "
+                f"this bridge is {self.mt5_config_id[:8]} — skipping"
+            )
+        return match
 
     async def fetch_pending(self) -> list[Signal]:
         """Fetch all pending signals (used on startup + polling fallback)."""
@@ -50,7 +78,8 @@ class SignalReceiver:
                         return []
                     data = await resp.json()
                     signals = [Signal(**s) for s in data.get("signals", [])]
-                    return [s for s in signals if s.id not in self.seen_ids]
+                    return [s for s in signals
+                            if s.id not in self.seen_ids and self._is_for_this_bridge(s)]
         except Exception as e:
             logger.error(f"Error fetching pending signals: {e}")
             return []
@@ -135,7 +164,7 @@ class SignalReceiver:
         if event_type == "signal" and data:
             try:
                 signal = Signal(**json.loads(data))
-                if signal.id not in self.seen_ids:
+                if signal.id not in self.seen_ids and self._is_for_this_bridge(signal):
                     self.seen_ids.add(signal.id)
                     await self._signal_queue.put(signal)
                     logger.info(f"SSE → {signal.pair} {signal.direction} ({signal.id[:8]})")
@@ -152,7 +181,9 @@ class SignalReceiver:
             try:
                 signals = await self.fetch_pending()
                 for signal in signals:
-                    if signal.id not in self.seen_ids:
+                    # fetch_pending already applies _is_for_this_bridge, but
+                    # guard here too in case signals arrive via other paths.
+                    if signal.id not in self.seen_ids and self._is_for_this_bridge(signal):
                         self.seen_ids.add(signal.id)
                         await self._signal_queue.put(signal)
                         logger.info(f"POLL → {signal.pair} {signal.direction} ({signal.id[:8]})")
