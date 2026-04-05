@@ -63,3 +63,4 @@ class AgentConfig(BaseModel):
     poll_interval_seconds: int = 5
     mt5: Optional[MT5Config] = None
     mt5_config_id: Optional[str] = None         # UUID of this bridge's MT5 config in Aurora X
+    mt5_exe_path: Optional[str] = None          # Path to terminal64.exe (needed when multiple MT5 terminals open)

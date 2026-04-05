@@ -22,6 +22,7 @@ from signal_receiver import SignalReceiver
 from mt5_writer import MT5Writer
 from result_reader import ResultReader
 from health_monitor import HealthMonitor, HealthStatus
+from mt5_reporter import MT5Reporter
 
 # ─── Logging setup ───────────────────────────────────────────────────────────
 
@@ -48,6 +49,8 @@ async def main():
     parser.add_argument("--mt5-config-id", type=str,
                         help="MT5 config UUID from Aurora X → Trader tab (required when running "
                              "multiple bridge instances for the same account)")
+    parser.add_argument("--mt5-exe-path", type=str,
+                        help="Full path to terminal64.exe (needed when multiple MT5 installs are open)")
     args = parser.parse_args()
 
     # Load config
@@ -60,6 +63,9 @@ async def main():
         save_config(config)
     if args.mt5_config_id:
         config.mt5_config_id = args.mt5_config_id
+        save_config(config)
+    if args.mt5_exe_path:
+        config.mt5_exe_path = args.mt5_exe_path
         save_config(config)
 
     logger.info("═" * 50)
@@ -123,6 +129,12 @@ async def main():
                              mt5_config_id=config.mt5_config_id)
     writer = MT5Writer(config.mt5_signal_file) if config.mt5_signal_file else None
     health = HealthMonitor(config.mt5_signal_file)
+    reporter = MT5Reporter(
+        token=config.token,
+        api_url=config.api_url,
+        mt5_config_id=config.mt5_config_id or "",
+        mt5_exe_path=config.mt5_exe_path,
+    )
 
     # Start system tray
     shutdown_event = asyncio.Event()
@@ -157,6 +169,9 @@ async def main():
         logger.info("No pending signals")
 
     health.update_status(HealthStatus.CONNECTED)
+
+    # ── Step 4b: Start MT5 performance reporter ───────────────────────────
+    await reporter.start()
 
     # ── Step 5: Start result reader (report EA execution back to API) ─────
     result_task = None
@@ -240,6 +255,7 @@ async def main():
         pass
     finally:
         receiver.stop()
+        reporter.stop()
         if result_task:
             result_task.cancel()
         health.stop()
