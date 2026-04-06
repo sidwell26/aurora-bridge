@@ -102,12 +102,18 @@ class MT5Reporter:
             return
         r = rows[0]
         try:
+            margin = float(r.get("margin", 0) or 0)
+            equity = float(r.get("equity", 0) or 0)
+            margin_level_raw = r.get("margin_level")
+            margin_level = float(margin_level_raw) if margin_level_raw and float(margin_level_raw or 0) > 0 \
+                else (equity / margin * 100 if margin > 0 else None)
             payload = {
                 "mt5ConfigId": self.mt5_config_id,
                 "balance":     float(r.get("balance", 0) or 0),
-                "equity":      float(r.get("equity", 0) or 0),
-                "margin":      float(r.get("margin", 0) or 0),
+                "equity":      equity,
+                "margin":      margin,
                 "freeMargin":  float(r.get("free_margin", 0) or 0),
+                "marginLevel": margin_level,
                 "floatingPnl": float(r.get("floating_pnl", 0) or 0),
                 "currency":    r.get("currency", "USD").strip(),
                 "leverage":    int(r.get("leverage", 0) or 0),
