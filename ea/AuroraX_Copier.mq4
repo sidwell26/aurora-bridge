@@ -20,6 +20,9 @@ extern int     PollIntervalMs   = 2000;
 extern double  DefaultSLPips    = 20;
 extern int     MaxTradesPerPair = 1;
 
+datetime lastReportTime = 0;
+#define REPORT_INTERVAL_SEC 60
+
 //+------------------------------------------------------------------+
 //| Init                                                               |
 //+------------------------------------------------------------------+
@@ -40,6 +43,13 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
+   datetime now = TimeCurrent();
+   if(now - lastReportTime >= REPORT_INTERVAL_SEC)
+   {
+      lastReportTime = now;
+      WritePerformanceFiles();
+   }
+
    if(!FileIsExist(SignalFile))
       return;
 
@@ -264,6 +274,85 @@ string JoinFields(string &fields[])
       result += fields[i];
    }
    return result;
+}
+
+void WritePerformanceFiles()
+{
+   // ── aurora_account.csv ──────────────────────────────────────────
+   int aHandle = FileOpen("aurora_account.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
+   if(aHandle != INVALID_HANDLE)
+   {
+      FileWriteString(aHandle, "balance,equity,margin,free_margin,floating_pnl,currency,leverage\n");
+      FileWriteString(aHandle,
+         DoubleToStr(AccountBalance(), 2) + "," +
+         DoubleToStr(AccountEquity(), 2) + "," +
+         DoubleToStr(AccountMargin(), 2) + "," +
+         DoubleToStr(AccountFreeMargin(), 2) + "," +
+         DoubleToStr(AccountProfit(), 2) + "," +
+         AccountCurrency() + "," +
+         IntegerToString(AccountLeverage()) + "\n"
+      );
+      FileClose(aHandle);
+   }
+
+   // ── aurora_positions.csv ─────────────────────────────────────────
+   int pHandle = FileOpen("aurora_positions.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
+   if(pHandle != INVALID_HANDLE)
+   {
+      FileWriteString(pHandle, "ticket,symbol,direction,lots,open_price,current_price,sl,tp,floating_pnl,swap,opened_at\n");
+      for(int i = 0; i < OrdersTotal(); i++)
+      {
+         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+         if(OrderType() != OP_BUY && OrderType() != OP_SELL) continue;
+         string dir = OrderType() == OP_BUY ? "BUY" : "SELL";
+         double curPrice = OrderType() == OP_BUY
+            ? MarketInfo(OrderSymbol(), MODE_BID)
+            : MarketInfo(OrderSymbol(), MODE_ASK);
+         FileWriteString(pHandle,
+            IntegerToString(OrderTicket()) + "," +
+            OrderSymbol() + "," +
+            dir + "," +
+            DoubleToStr(OrderLots(), 2) + "," +
+            DoubleToStr(OrderOpenPrice(), 5) + "," +
+            DoubleToStr(curPrice, 5) + "," +
+            DoubleToStr(OrderStopLoss(), 5) + "," +
+            DoubleToStr(OrderTakeProfit(), 5) + "," +
+            DoubleToStr(OrderProfit(), 2) + "," +
+            DoubleToStr(OrderSwap(), 2) + "," +
+            IntegerToString((int)OrderOpenTime()) + "\n"
+         );
+      }
+      FileClose(pHandle);
+   }
+
+   // ── aurora_history.csv ───────────────────────────────────────────
+   int hHandle = FileOpen("aurora_history.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
+   if(hHandle != INVALID_HANDLE)
+   {
+      FileWriteString(hHandle, "position_id,symbol,direction,lots,open_price,close_price,pnl,swap,commission,opened_at,closed_at\n");
+      datetime fromDate = TimeCurrent() - 90 * 86400;
+      for(int i = OrdersHistoryTotal() - 1; i >= 0; i--)
+      {
+         if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
+         if(OrderType() != OP_BUY && OrderType() != OP_SELL) continue;
+         if(OrderCloseTime() < fromDate) continue;
+         string dir = OrderType() == OP_BUY ? "BUY" : "SELL";
+         FileWriteString(hHandle,
+            IntegerToString(OrderTicket()) + "," +
+            OrderSymbol() + "," +
+            dir + "," +
+            DoubleToStr(OrderLots(), 2) + "," +
+            DoubleToStr(OrderOpenPrice(), 5) + "," +
+            DoubleToStr(OrderClosePrice(), 5) + "," +
+            DoubleToStr(OrderProfit(), 2) + "," +
+            DoubleToStr(OrderSwap(), 2) + "," +
+            DoubleToStr(OrderCommission(), 2) + "," +
+            IntegerToString((int)OrderOpenTime()) + "," +
+            IntegerToString((int)OrderCloseTime()) + "\n"
+         );
+      }
+      FileClose(hHandle);
+   }
 }
 
 void OnTick() {}

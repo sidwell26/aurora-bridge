@@ -133,7 +133,7 @@ async def main():
         token=config.token,
         api_url=config.api_url,
         mt5_config_id=config.mt5_config_id or "",
-        mt5_exe_path=config.mt5_exe_path,
+        mt5_signal_file=config.mt5_signal_file,  # same dir EA writes aurora_*.csv files to
     )
 
     # Start system tray

@@ -26,8 +26,11 @@ input int      MaxTradesPerPair = 1;                // Fallback max trades per p
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
-datetime lastCheck = 0;
-string   processedFile = "signals_done.csv";
+datetime lastCheck      = 0;
+datetime lastReportTime = 0;
+string   processedFile  = "signals_done.csv";
+
+#define REPORT_INTERVAL_SEC 60
 
 //+------------------------------------------------------------------+
 //| Expert initialization                                             |
@@ -51,11 +54,18 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-//| Timer event — poll for new signals                                |
+//| Timer event — poll for new signals + 60s performance reporting   |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
    CheckSignals();
+
+   datetime now = TimeCurrent();
+   if(now - lastReportTime >= REPORT_INTERVAL_SEC)
+   {
+      lastReportTime = now;
+      WritePerformanceFiles();
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -481,6 +491,123 @@ string JoinFields(string &fields[])
       result += fields[i];
    }
    return result;
+}
+
+//+------------------------------------------------------------------+
+//| Write account, positions and history CSVs for bridge reporter    |
+//+------------------------------------------------------------------+
+void WritePerformanceFiles()
+{
+   // ── aurora_account.csv ──────────────────────────────────────────
+   int aHandle = FileOpen("aurora_account.csv", FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
+   if(aHandle != INVALID_HANDLE)
+   {
+      FileWriteString(aHandle, "balance,equity,margin,free_margin,floating_pnl,currency,leverage\n");
+      FileWriteString(aHandle,
+         DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + "," +
+         DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + "," +
+         DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN), 2) + "," +
+         DoubleToString(AccountInfoDouble(ACCOUNT_FREEMARGIN), 2) + "," +
+         DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2) + "," +
+         AccountInfoString(ACCOUNT_CURRENCY) + "," +
+         IntegerToString((int)AccountInfoInteger(ACCOUNT_LEVERAGE)) + "\n"
+      );
+      FileClose(aHandle);
+   }
+
+   // ── aurora_positions.csv ─────────────────────────────────────────
+   int pHandle = FileOpen("aurora_positions.csv", FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
+   if(pHandle != INVALID_HANDLE)
+   {
+      FileWriteString(pHandle, "ticket,symbol,direction,lots,open_price,current_price,sl,tp,floating_pnl,swap,opened_at\n");
+      for(int i = 0; i < PositionsTotal(); i++)
+      {
+         ulong ticket = PositionGetTicket(i);
+         if(ticket == 0) continue;
+         string dir = PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ? "BUY" : "SELL";
+         FileWriteString(pHandle,
+            IntegerToString((long)ticket) + "," +
+            PositionGetString(POSITION_SYMBOL) + "," +
+            dir + "," +
+            DoubleToString(PositionGetDouble(POSITION_VOLUME), 2) + "," +
+            DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN), 5) + "," +
+            DoubleToString(PositionGetDouble(POSITION_PRICE_CURRENT), 5) + "," +
+            DoubleToString(PositionGetDouble(POSITION_SL), 5) + "," +
+            DoubleToString(PositionGetDouble(POSITION_TP), 5) + "," +
+            DoubleToString(PositionGetDouble(POSITION_PROFIT), 2) + "," +
+            DoubleToString(PositionGetDouble(POSITION_SWAP), 2) + "," +
+            IntegerToString((long)PositionGetInteger(POSITION_TIME)) + "\n"
+         );
+      }
+      FileClose(pHandle);
+   }
+
+   // ── aurora_history.csv ───────────────────────────────────────────
+   // Fetch last 90 days of closed deals
+   datetime fromDate = TimeCurrent() - 90 * 86400;
+   HistorySelect(fromDate, TimeCurrent());
+
+   int hHandle = FileOpen("aurora_history.csv", FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
+   if(hHandle != INVALID_HANDLE)
+   {
+      FileWriteString(hHandle, "position_id,symbol,direction,lots,open_price,close_price,pnl,swap,commission,opened_at,closed_at\n");
+
+      // Collect entry deals indexed by position_id
+      int total = HistoryDealsTotal();
+      ulong entryTickets[];
+      ulong entryPosIds[];
+      ArrayResize(entryTickets, 0);
+      ArrayResize(entryPosIds, 0);
+
+      for(int i = 0; i < total; i++)
+      {
+         ulong dTicket = HistoryDealGetTicket(i);
+         if(dTicket == 0) continue;
+         if(HistoryDealGetInteger(dTicket, DEAL_ENTRY) != DEAL_ENTRY_IN) continue;
+         int sz = ArraySize(entryPosIds);
+         ArrayResize(entryPosIds, sz + 1);
+         ArrayResize(entryTickets, sz + 1);
+         entryPosIds[sz]  = (ulong)HistoryDealGetInteger(dTicket, DEAL_POSITION_ID);
+         entryTickets[sz] = dTicket;
+      }
+
+      // Match exit deals
+      for(int i = 0; i < total; i++)
+      {
+         ulong dTicket = HistoryDealGetTicket(i);
+         if(dTicket == 0) continue;
+         if(HistoryDealGetInteger(dTicket, DEAL_ENTRY) != DEAL_ENTRY_OUT) continue;
+
+         ulong posId = (ulong)HistoryDealGetInteger(dTicket, DEAL_POSITION_ID);
+
+         // Find matching entry
+         ulong entryTicket = 0;
+         for(int j = 0; j < ArraySize(entryPosIds); j++)
+         {
+            if(entryPosIds[j] == posId) { entryTicket = entryTickets[j]; break; }
+         }
+         if(entryTicket == 0) continue;
+
+         string dir = HistoryDealGetInteger(dTicket, DEAL_TYPE) == DEAL_TYPE_BUY ? "SELL" : "BUY"; // Exit type is opposite
+         // Use entry deal type for direction
+         string entryDir = HistoryDealGetInteger(entryTicket, DEAL_TYPE) == DEAL_TYPE_BUY ? "BUY" : "SELL";
+
+         FileWriteString(hHandle,
+            IntegerToString((long)posId) + "," +
+            HistoryDealGetString(dTicket, DEAL_SYMBOL) + "," +
+            entryDir + "," +
+            DoubleToString(HistoryDealGetDouble(dTicket, DEAL_VOLUME), 2) + "," +
+            DoubleToString(HistoryDealGetDouble(entryTicket, DEAL_PRICE), 5) + "," +
+            DoubleToString(HistoryDealGetDouble(dTicket, DEAL_PRICE), 5) + "," +
+            DoubleToString(HistoryDealGetDouble(dTicket, DEAL_PROFIT), 2) + "," +
+            DoubleToString(HistoryDealGetDouble(dTicket, DEAL_SWAP), 2) + "," +
+            DoubleToString(HistoryDealGetDouble(dTicket, DEAL_COMMISSION), 2) + "," +
+            IntegerToString((long)HistoryDealGetInteger(entryTicket, DEAL_TIME)) + "," +
+            IntegerToString((long)HistoryDealGetInteger(dTicket, DEAL_TIME)) + "\n"
+         );
+      }
+      FileClose(hHandle);
+   }
 }
 
 //+------------------------------------------------------------------+
