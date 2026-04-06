@@ -21,6 +21,7 @@ extern double  DefaultSLPips    = 20;
 extern int     MaxTradesPerPair = 1;
 
 datetime lastReportTime = 0;
+string   g_perfFolder   = "";   // aurora_{AccountNumber}\ — set in OnInit
 #define REPORT_INTERVAL_SEC 60
 
 //+------------------------------------------------------------------+
@@ -28,7 +29,12 @@ datetime lastReportTime = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
+   // Create per-account subfolder so multiple terminals don't share the same CSVs
+   g_perfFolder = "aurora_" + IntegerToString(AccountNumber()) + "\\";
+   FolderCreate(StringSubstr(g_perfFolder, 0, StringLen(g_perfFolder) - 1));
+
    Print("Aurora X Copier EA (MT4) started");
+   Print("Performance folder: ", g_perfFolder);
    EventSetMillisecondTimer(PollIntervalMs);
    return INIT_SUCCEEDED;
 }
@@ -279,7 +285,7 @@ string JoinFields(string &fields[])
 void WritePerformanceFiles()
 {
    // ── aurora_account.csv ──────────────────────────────────────────
-   int aHandle = FileOpen("aurora_account.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
+   int aHandle = FileOpen(g_perfFolder + "aurora_account.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
    if(aHandle != INVALID_HANDLE)
    {
       FileWriteString(aHandle, "balance,equity,margin,free_margin,floating_pnl,currency,leverage\n");
@@ -296,7 +302,7 @@ void WritePerformanceFiles()
    }
 
    // ── aurora_positions.csv ─────────────────────────────────────────
-   int pHandle = FileOpen("aurora_positions.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
+   int pHandle = FileOpen(g_perfFolder + "aurora_positions.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
    if(pHandle != INVALID_HANDLE)
    {
       FileWriteString(pHandle, "ticket,symbol,direction,lots,open_price,current_price,sl,tp,floating_pnl,swap,opened_at\n");
@@ -326,7 +332,7 @@ void WritePerformanceFiles()
    }
 
    // ── aurora_history.csv ───────────────────────────────────────────
-   int hHandle = FileOpen("aurora_history.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
+   int hHandle = FileOpen(g_perfFolder + "aurora_history.csv", FILE_WRITE | FILE_CSV | FILE_ANSI);
    if(hHandle != INVALID_HANDLE)
    {
       FileWriteString(hHandle, "position_id,symbol,direction,lots,open_price,close_price,pnl,swap,commission,opened_at,closed_at\n");
