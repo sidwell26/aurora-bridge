@@ -105,7 +105,11 @@ class MT5Reporter:
             margin = float(r.get("margin", 0) or 0)
             equity = float(r.get("equity", 0) or 0)
             margin_level_raw = r.get("margin_level")
-            margin_level = float(margin_level_raw) if margin_level_raw and float(margin_level_raw or 0) > 0 \
+            try:
+                margin_level_parsed = float(margin_level_raw) if margin_level_raw else None
+            except (ValueError, TypeError):
+                margin_level_parsed = None
+            margin_level = margin_level_parsed if margin_level_parsed and margin_level_parsed > 0 \
                 else (equity / margin * 100 if margin > 0 else None)
             payload = {
                 "mt5ConfigId": self.mt5_config_id,
