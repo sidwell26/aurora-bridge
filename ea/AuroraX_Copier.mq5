@@ -507,7 +507,7 @@ void WritePerformanceFiles()
          DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + "," +
          DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + "," +
          DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN), 2) + "," +
-         DoubleToString(AccountInfoDouble(ACCOUNT_FREEMARGIN), 2) + "," +
+         DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2) + "," +
          DoubleToString(AccountInfoDouble(ACCOUNT_PROFIT), 2) + "," +
          AccountInfoString(ACCOUNT_CURRENCY) + "," +
          IntegerToString((int)AccountInfoInteger(ACCOUNT_LEVERAGE)) + "\n"
