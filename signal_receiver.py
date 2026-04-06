@@ -118,8 +118,11 @@ class SignalReceiver:
                 logger.debug(f"Connecting to SSE stream...")
                 timeout = aiohttp.ClientTimeout(total=None, sock_read=60)
                 async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(
-                        f"{self.api_url}/bridge/signals/stream",
+                    sse_url = f"{self.api_url}/bridge/signals/stream"
+                if self.mt5_config_id:
+                    sse_url += f"?mt5ConfigId={self.mt5_config_id}"
+                async with session.get(
+                        sse_url,
                         headers=self.headers,
                     ) as resp:
                         if resp.status == 401:
