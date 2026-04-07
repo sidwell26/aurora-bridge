@@ -540,7 +540,7 @@ void WritePerformanceFiles()
             DoubleToString(PositionGetDouble(POSITION_TP), 5) + "," +
             DoubleToString(PositionGetDouble(POSITION_PROFIT), 2) + "," +
             DoubleToString(PositionGetDouble(POSITION_SWAP), 2) + "," +
-            IntegerToString((long)PositionGetInteger(POSITION_TIME)) + "\n"
+            IntegerToString((long)PositionGetInteger(POSITION_TIME) - (TimeCurrent() - TimeGMT())) + "\n"
          );
       }
       FileClose(pHandle);
@@ -606,8 +606,8 @@ void WritePerformanceFiles()
             DoubleToString(HistoryDealGetDouble(dTicket, DEAL_PROFIT), 2) + "," +
             DoubleToString(HistoryDealGetDouble(dTicket, DEAL_SWAP), 2) + "," +
             DoubleToString(HistoryDealGetDouble(dTicket, DEAL_COMMISSION), 2) + "," +
-            IntegerToString((long)HistoryDealGetInteger(entryTicket, DEAL_TIME)) + "," +
-            IntegerToString((long)HistoryDealGetInteger(dTicket, DEAL_TIME)) + "\n"
+            IntegerToString((long)HistoryDealGetInteger(entryTicket, DEAL_TIME) - (TimeCurrent() - TimeGMT())) + "," +
+            IntegerToString((long)HistoryDealGetInteger(dTicket, DEAL_TIME) - (TimeCurrent() - TimeGMT())) + "\n"
          );
       }
       FileClose(hHandle);

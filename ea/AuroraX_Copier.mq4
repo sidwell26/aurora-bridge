@@ -326,7 +326,7 @@ void WritePerformanceFiles()
             DoubleToStr(OrderTakeProfit(), 5) + "," +
             DoubleToStr(OrderProfit(), 2) + "," +
             DoubleToStr(OrderSwap(), 2) + "," +
-            IntegerToString((int)OrderOpenTime()) + "\n"
+            IntegerToString((int)OrderOpenTime() - (TimeCurrent() - TimeGMT())) + "\n"
          );
       }
       FileClose(pHandle);
@@ -354,8 +354,8 @@ void WritePerformanceFiles()
             DoubleToStr(OrderProfit(), 2) + "," +
             DoubleToStr(OrderSwap(), 2) + "," +
             DoubleToStr(OrderCommission(), 2) + "," +
-            IntegerToString((int)OrderOpenTime()) + "," +
-            IntegerToString((int)OrderCloseTime()) + "\n"
+            IntegerToString((int)OrderOpenTime() - (TimeCurrent() - TimeGMT())) + "," +
+            IntegerToString((int)OrderCloseTime() - (TimeCurrent() - TimeGMT())) + "\n"
          );
       }
       FileClose(hHandle);
