@@ -45,6 +45,7 @@ async def main():
     parser.add_argument("--setup", action="store_true", help="Force re-authentication")
     parser.add_argument("--token", type=str, help="Bridge API key (from Aurora X → Strategy Builder → Trader tab)")
     parser.add_argument("--mt5-path", type=str, help="Manual path to MT5 Files directory")
+    parser.add_argument("--mt5-signal-file", type=str, help="Alias for --mt5-path (per-account subfolder)")
     parser.add_argument("--api-url", type=str, help="Aurora API URL override")
     parser.add_argument("--mt5-config-id", type=str,
                         help="MT5 config UUID from Aurora X → Trader tab (required when running "
@@ -58,7 +59,10 @@ async def main():
     if args.api_url:
         config.api_url = args.api_url
         save_config(config)
-    if args.mt5_path:
+    if args.mt5_signal_file:
+        config.mt5_signal_file = args.mt5_signal_file
+        save_config(config)
+    elif args.mt5_path:
         config.mt5_signal_file = args.mt5_path
         save_config(config)
     if args.mt5_config_id:
