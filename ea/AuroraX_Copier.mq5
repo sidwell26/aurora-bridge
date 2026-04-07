@@ -79,13 +79,11 @@ void OnTimer()
 //+------------------------------------------------------------------+
 void CheckSignals()
 {
-   if(!FileIsExist(SignalFile, FILE_COMMON))
-   {
-      Print("DEBUG: signals.csv not found");
+   string signalPath = g_perfFolder + SignalFile;
+   if(!FileIsExist(signalPath, FILE_COMMON))
       return;
-   }
 
-   int handle = FileOpen(SignalFile, FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ);
+   int handle = FileOpen(signalPath, FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ);
    if(handle == INVALID_HANDLE)
    {
       Print("DEBUG: Failed to open signals.csv, error=", GetLastError());
@@ -219,7 +217,7 @@ void CheckSignals()
    // Rewrite file with updated statuses
    if(hasUnprocessed)
    {
-      int wHandle = FileOpen(SignalFile, FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
+      int wHandle = FileOpen(signalPath, FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
       if(wHandle != INVALID_HANDLE)
       {
          for(int i = 0; i < lineCount; i++)
@@ -473,7 +471,7 @@ bool ExecuteTrade(string symbol, string direction, double slPips, double tpPips,
          " Ticket=", result.order);
 
    // Write ticket to a file the bridge agent can read
-   string ticketFile = "last_ticket.csv";
+   string ticketFile = g_perfFolder + "last_ticket.csv";
    int tHandle = FileOpen(ticketFile, FILE_WRITE | FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON);
    if(tHandle != INVALID_HANDLE)
    {

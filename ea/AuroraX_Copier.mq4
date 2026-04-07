@@ -56,10 +56,11 @@ void OnTimer()
       WritePerformanceFiles();
    }
 
-   if(!FileIsExist(SignalFile))
+   string signalPath = g_perfFolder + SignalFile;
+   if(!FileIsExist(signalPath))
       return;
 
-   int handle = FileOpen(SignalFile, FILE_READ | FILE_CSV | FILE_ANSI, ',');
+   int handle = FileOpen(signalPath, FILE_READ | FILE_CSV | FILE_ANSI, ',');
    if(handle == INVALID_HANDLE) return;
 
    string lines[];
@@ -238,7 +239,7 @@ void OnTimer()
 
    if(hasUnprocessed)
    {
-      int wHandle = FileOpen(SignalFile, FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+      int wHandle = FileOpen(signalPath, FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
       if(wHandle != INVALID_HANDLE)
       {
          for(int i = 0; i < lineCount; i++)
