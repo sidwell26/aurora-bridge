@@ -177,6 +177,20 @@ void CheckSignals()
          if(parsed > 0) signalMagic = parsed;
       }
 
+      // Weekend-close: a CLOSE action means flatten all open positions for this
+      // alert's magic on this symbol. Used by the server's close_before_weekend
+      // guard. Magic is per-strategy so we only touch positions from this alert.
+      string signalAction = fields[11];
+      StringTrimRight(signalAction); StringTrimLeft(signalAction);
+      if(signalAction == "CLOSE")
+      {
+         int closed = CloseTradesWithMagic(symbol, signalMagic);
+         Print("CLOSE signal: flattened ", closed, " position(s) on ", symbol, " magic=", signalMagic);
+         fields[9] = "EXECUTED";
+         updatedLines[i] = JoinFields(fields);
+         continue;
+      }
+
       // Check per-pair trade limit (use signal value if present, else EA input)
       int maxTrades = MaxTradesPerPair;
       if(ArraySize(fields) >= 13 && StringLen(fields[12]) > 0)
@@ -243,6 +257,41 @@ int CountOpenTradesWithMagic(string symbol, int magic)
       }
    }
    return count;
+}
+
+//+------------------------------------------------------------------+
+//| Close all open positions for a symbol with a specific magic       |
+//+------------------------------------------------------------------+
+int CloseTradesWithMagic(string symbol, int magic)
+{
+   int closed = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != magic) continue;
+
+      MqlTradeRequest req; MqlTradeResult res;
+      ZeroMemory(req); ZeroMemory(res);
+      ENUM_POSITION_TYPE ptype = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      req.action       = TRADE_ACTION_DEAL;
+      req.position     = ticket;
+      req.symbol       = symbol;
+      req.volume       = PositionGetDouble(POSITION_VOLUME);
+      req.type         = (ptype == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
+      req.price        = (ptype == POSITION_TYPE_BUY)
+                         ? SymbolInfoDouble(symbol, SYMBOL_BID)
+                         : SymbolInfoDouble(symbol, SYMBOL_ASK);
+      req.deviation    = MaxSlippage;
+      req.magic        = magic;
+      req.type_filling = ORDER_FILLING_IOC;
+      if(OrderSend(req, res) && (res.retcode == TRADE_RETCODE_DONE || res.retcode == TRADE_RETCODE_PLACED))
+         closed++;
+      else
+         Print("CLOSE failed ticket=", ticket, " retcode=", res.retcode, " err=", GetLastError());
+   }
+   return closed;
 }
 
 //+------------------------------------------------------------------+

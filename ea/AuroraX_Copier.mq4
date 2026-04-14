@@ -117,6 +117,14 @@ void OnTimer()
       double rr        = StrToDouble(fields[7]);
       double riskPct   = StrToDouble(fields[8]);
 
+      // Per-signal magic (field 13) — default to EA input MagicNumber
+      int signalMagic = MagicNumber;
+      if(ArraySize(fields) >= 14 && StringLen(fields[13]) > 0)
+      {
+         int parsed = (int)StrToInteger(fields[13]);
+         if(parsed > 0) signalMagic = parsed;
+      }
+
       if(RiskPercent > 0) riskPct = RiskPercent;
       if(MaxRiskReward > 0 && rr > MaxRiskReward) rr = MaxRiskReward;
 
@@ -146,8 +154,21 @@ void OnTimer()
          }
       }
 
-      // Check per-pair trade limit
-      if(MaxTradesPerPair > 0 && CountOpenTrades(symbol) >= MaxTradesPerPair)
+      // Weekend-close: flatten all open positions for this alert's magic on
+      // this symbol. Triggered by the server's close_before_weekend guard.
+      string signalAction = ArraySize(fields) >= 12 ? fields[11] : "OPEN";
+      StringTrimRight(signalAction); StringTrimLeft(signalAction);
+      if(signalAction == "CLOSE")
+      {
+         int closed = CloseTradesWithMagic(symbol, signalMagic);
+         Print("CLOSE signal: flattened ", closed, " position(s) on ", symbol, " magic=", signalMagic);
+         fields[9] = "EXECUTED";
+         updatedLines[i] = JoinFields(fields);
+         continue;
+      }
+
+      // Check per-pair trade limit (scoped to this strategy's magic)
+      if(MaxTradesPerPair > 0 && CountOpenTradesWithMagic(symbol, signalMagic) >= MaxTradesPerPair)
       {
          Print("Max trades per pair reached for ", symbol, " (", MaxTradesPerPair, ")");
          fields[9] = "MAX_PER_PAIR";
@@ -222,7 +243,7 @@ void OnTimer()
       int ticket = OrderSend(symbol, cmd, lots, price, MaxSlippage,
                              NormalizeDouble(sl, Digits),
                              NormalizeDouble(tp, Digits),
-                             "AuroraX", MagicNumber);
+                             "AuroraX", signalMagic);
 
       if(ticket > 0)
       {
@@ -249,18 +270,37 @@ void OnTimer()
    }
 }
 
-int CountOpenTrades(string symbol)
+int CountOpenTradesWithMagic(string symbol, int magic)
 {
    int count = 0;
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
       {
-         if(OrderSymbol() == symbol && OrderMagicNumber() == MagicNumber)
+         if(OrderSymbol() == symbol && OrderMagicNumber() == magic)
             count++;
       }
    }
    return count;
+}
+
+int CloseTradesWithMagic(string symbol, int magic)
+{
+   int closed = 0;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderSymbol() != symbol) continue;
+      if(OrderMagicNumber() != magic) continue;
+      int type = OrderType();
+      if(type != OP_BUY && type != OP_SELL) continue;
+      double price = (type == OP_BUY) ? MarketInfo(symbol, MODE_BID) : MarketInfo(symbol, MODE_ASK);
+      if(OrderClose(OrderTicket(), OrderLots(), price, MaxSlippage))
+         closed++;
+      else
+         Print("CLOSE failed ticket=", OrderTicket(), " err=", GetLastError());
+   }
+   return closed;
 }
 
 double ExtractPips(string value)
