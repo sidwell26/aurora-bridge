@@ -289,7 +289,11 @@ void WidenAllSLs()
       double currentSL = PositionGetDouble(POSITION_SL);
       string gvName    = "aurora_orig_sl_" + IntegerToString((long)ticket);
 
-      // Always store original so RestoreAllSLs knows what to put back
+      // If GlobalVariable already exists, this position was widened in a
+      // previous session (EA restart mid-window) — don't overwrite the
+      // true original with the already-widened value.
+      if(GlobalVariableCheck(gvName)) continue;
+
       GlobalVariableSet(gvName, currentSL);
 
       if(currentSL == 0) continue; // No SL set — nothing to widen

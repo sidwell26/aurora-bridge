@@ -319,6 +319,11 @@ void WidenAllSLs4()
       double currentSL = OrderStopLoss();
       string gvName    = "aurora_orig_sl_" + IntegerToString(ticket);
 
+      // If GlobalVariable already exists, this position was widened in a
+      // previous session (EA restart mid-window) — don't overwrite the
+      // true original with the already-widened value.
+      if(GlobalVariableCheck(gvName)) continue;
+
       GlobalVariableSet(gvName, currentSL);
 
       if(currentSL == 0) continue;
