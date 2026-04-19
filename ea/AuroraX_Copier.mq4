@@ -11,17 +11,20 @@
 
 // ─── Inputs ──────────────────────────────────────────────────────────────────
 
-extern string  SignalFile       = "signals.csv";
-extern double  RiskPercent      = 1.0;
-extern double  MaxRiskReward    = 0;
-extern int     MaxSlippage      = 3;
-extern int     MagicNumber      = 202603;
-extern int     PollIntervalMs   = 2000;
-extern double  DefaultSLPips    = 20;
-extern int     MaxTradesPerPair = 1;
+extern string  SignalFile            = "signals.csv";
+extern double  RiskPercent           = 1.0;
+extern double  MaxRiskReward         = 0;
+extern int     MaxSlippage           = 3;
+extern int     MagicNumber           = 202603;
+extern int     PollIntervalMs        = 2000;
+extern double  DefaultSLPips         = 20;
+extern int     MaxTradesPerPair      = 1;
+extern bool    EnableSpreadSLWiden   = true;  // Widen SL during NY→Asia spread window
+extern int     SpreadWindowWidenPips = 30;    // Pips to widen SL during spread window
 
-datetime lastReportTime = 0;
-string   g_perfFolder   = "";   // aurora_{AccountNumber}\ — set in OnInit
+datetime lastReportTime  = 0;
+string   g_perfFolder    = "";   // aurora_{AccountNumber}\ — set in OnInit
+bool     g_inSpreadWindow = false;
 #define REPORT_INTERVAL_SEC 60
 
 //+------------------------------------------------------------------+
@@ -49,6 +52,8 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
+   if(EnableSpreadSLWiden) CheckSpreadWindow4();
+
    datetime now = TimeCurrent();
    if(now - lastReportTime >= REPORT_INTERVAL_SEC)
    {
@@ -267,6 +272,102 @@ void OnTimer()
             FileWriteString(wHandle, updatedLines[i] + "\n");
          FileClose(wHandle);
       }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Detect NY→Asia spread window and widen/restore SLs (MT4)         |
+//| Window: Mon–Thu 20:55–22:00 UTC                                  |
+//+------------------------------------------------------------------+
+void CheckSpreadWindow4()
+{
+   datetime gmt  = TimeGMT();
+   int dt_hour   = TimeHour(gmt);
+   int dt_min    = TimeMinute(gmt);
+   int day       = TimeDayOfWeek(gmt); // 0=Sun,1=Mon,...,6=Sat
+   int mins      = dt_hour * 60 + dt_min;
+
+   bool shouldWiden = (day >= 1 && day <= 4)
+                   && (mins >= 20 * 60 + 55)
+                   && (mins <  22 * 60);
+
+   if(shouldWiden && !g_inSpreadWindow)
+   {
+      g_inSpreadWindow = true;
+      Print("[SpreadWindow] NY/Asia changeover — widening all SLs by ", SpreadWindowWidenPips, " pips");
+      WidenAllSLs4();
+   }
+   else if(!shouldWiden && g_inSpreadWindow)
+   {
+      g_inSpreadWindow = false;
+      Print("[SpreadWindow] Window closed — restoring original SLs");
+      RestoreAllSLs4();
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Widen every open position's SL by SpreadWindowWidenPips pips     |
+//+------------------------------------------------------------------+
+void WidenAllSLs4()
+{
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderType() != OP_BUY && OrderType() != OP_SELL) continue;
+
+      int    ticket    = OrderTicket();
+      double currentSL = OrderStopLoss();
+      string gvName    = "aurora_orig_sl_" + IntegerToString(ticket);
+
+      GlobalVariableSet(gvName, currentSL);
+
+      if(currentSL == 0) continue;
+
+      string symbol  = OrderSymbol();
+      double point   = MarketInfo(symbol, MODE_POINT);
+      int    digits  = (int)MarketInfo(symbol, MODE_DIGITS);
+      double pipSize = (digits == 3 || digits == 5) ? point * 10 : point;
+
+      double widenDist = SpreadWindowWidenPips * pipSize;
+      double newSL = (OrderType() == OP_BUY)
+                   ? currentSL - widenDist
+                   : currentSL + widenDist;
+
+      if(OrderModify(ticket, OrderOpenPrice(), NormalizeDouble(newSL, digits), OrderTakeProfit(), 0, clrNONE))
+         Print("[SpreadWindow] Widened SL ticket=", ticket, " ", symbol,
+               "  orig=", currentSL, " → ", NormalizeDouble(newSL, digits));
+      else
+         Print("[SpreadWindow] Widen failed ticket=", ticket, " err=", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Restore every open position's SL from its stored Global Variable  |
+//+------------------------------------------------------------------+
+void RestoreAllSLs4()
+{
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderType() != OP_BUY && OrderType() != OP_SELL) continue;
+
+      int    ticket = OrderTicket();
+      string gvName = "aurora_orig_sl_" + IntegerToString(ticket);
+      if(!GlobalVariableCheck(gvName)) continue;
+
+      double origSL = GlobalVariableGet(gvName);
+      GlobalVariableDel(gvName);
+
+      if(origSL == 0) continue;
+
+      string symbol = OrderSymbol();
+      int    digits = (int)MarketInfo(symbol, MODE_DIGITS);
+
+      if(OrderModify(ticket, OrderOpenPrice(), NormalizeDouble(origSL, digits), OrderTakeProfit(), 0, clrNONE))
+         Print("[SpreadWindow] Restored SL ticket=", ticket, " ", symbol,
+               " → ", NormalizeDouble(origSL, digits));
+      else
+         Print("[SpreadWindow] Restore failed ticket=", ticket, " err=", GetLastError());
    }
 }
 

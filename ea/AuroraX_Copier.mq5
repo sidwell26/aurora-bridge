@@ -14,15 +14,17 @@
 
 // ─── Inputs ──────────────────────────────────────────────────────────────────
 
-input string   SignalFile       = "signals.csv";    // Signal file name (in Common/Files/)
-input double   RiskPercent      = 0;                // Risk % override (0 = use signal value)
-input double   MaxRiskReward    = 0;                // Max R:R to accept (0 = use signal value)
-input int      MaxSlippage      = 3;                // Max slippage in points
-input int      MagicNumber      = 202603;           // EA magic number
-input int      PollIntervalMs   = 2000;             // How often to check file (ms)
-input bool     AutoCalculateSL  = true;             // Calculate SL from method params
-input double   DefaultSLPips    = 20;               // Fallback SL if method unknown
-input int      MaxTradesPerPair = 1;                // Fallback max trades per pair if signal doesn't specify
+input string   SignalFile             = "signals.csv";  // Signal file name (in Common/Files/)
+input double   RiskPercent            = 0;              // Risk % override (0 = use signal value)
+input double   MaxRiskReward          = 0;              // Max R:R to accept (0 = use signal value)
+input int      MaxSlippage            = 3;              // Max slippage in points
+input int      MagicNumber            = 202603;         // EA magic number
+input int      PollIntervalMs         = 2000;           // How often to check file (ms)
+input bool     AutoCalculateSL        = true;           // Calculate SL from method params
+input double   DefaultSLPips          = 20;             // Fallback SL if method unknown
+input int      MaxTradesPerPair       = 1;              // Fallback max trades per pair if signal doesn't specify
+input bool     EnableSpreadSLWiden    = true;           // Widen SL during NY→Asia spread window
+input int      SpreadWindowWidenPips  = 30;             // Pips to widen SL during spread window
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ datetime lastCheck      = 0;
 datetime lastReportTime = 0;
 string   processedFile  = "signals_done.csv";
 string   g_perfFolder   = "";   // aurora_{AccountLogin}\ — set in OnInit
+bool     g_inSpreadWindow = false; // true while inside the NY/Asia spread window
 
 #define REPORT_INTERVAL_SEC 60
 
@@ -64,6 +67,8 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
+   if(EnableSpreadSLWiden) CheckSpreadWindow();
+
    CheckSignals();
 
    datetime now = TimeCurrent();
@@ -238,6 +243,122 @@ void CheckSignals()
             FileWriteString(wHandle, updatedLines[i] + "\n");
          FileClose(wHandle);
       }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Detect NY→Asia spread window and widen/restore SLs               |
+//| Window: Mon–Thu 20:55–22:00 UTC (Fri covered by weekend flatten) |
+//+------------------------------------------------------------------+
+void CheckSpreadWindow()
+{
+   MqlDateTime dt;
+   TimeToStruct(TimeGMT(), dt);
+   int mins = dt.hour * 60 + dt.min;
+   int day  = dt.day_of_week; // 0=Sun,1=Mon,...,6=Sat
+
+   bool shouldWiden = (day >= 1 && day <= 4)
+                   && (mins >= 20 * 60 + 55)
+                   && (mins <  22 * 60);
+
+   if(shouldWiden && !g_inSpreadWindow)
+   {
+      g_inSpreadWindow = true;
+      Print("[SpreadWindow] NY/Asia changeover — widening all SLs by ", SpreadWindowWidenPips, " pips");
+      WidenAllSLs();
+   }
+   else if(!shouldWiden && g_inSpreadWindow)
+   {
+      g_inSpreadWindow = false;
+      Print("[SpreadWindow] Window closed — restoring original SLs");
+      RestoreAllSLs();
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Widen every open position's SL by SpreadWindowWidenPips pips     |
+//| Stores original SL in a Global Variable for later restore         |
+//+------------------------------------------------------------------+
+void WidenAllSLs()
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+
+      double currentSL = PositionGetDouble(POSITION_SL);
+      string gvName    = "aurora_orig_sl_" + IntegerToString((long)ticket);
+
+      // Always store original so RestoreAllSLs knows what to put back
+      GlobalVariableSet(gvName, currentSL);
+
+      if(currentSL == 0) continue; // No SL set — nothing to widen
+
+      string symbol  = PositionGetString(POSITION_SYMBOL);
+      double point   = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      int    digits  = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+      double pipSize = (digits == 3 || digits == 5) ? point * 10 : point;
+
+      ENUM_POSITION_TYPE ptype = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      double widenDist = SpreadWindowWidenPips * pipSize;
+      // BUY: SL is below entry — push it further down
+      // SELL: SL is above entry — push it further up
+      double newSL = (ptype == POSITION_TYPE_BUY)
+                   ? currentSL - widenDist
+                   : currentSL + widenDist;
+
+      MqlTradeRequest req; MqlTradeResult res;
+      ZeroMemory(req); ZeroMemory(res);
+      req.action   = TRADE_ACTION_SLTP;
+      req.position = ticket;
+      req.symbol   = symbol;
+      req.sl       = NormalizeDouble(newSL, digits);
+      req.tp       = PositionGetDouble(POSITION_TP);
+
+      if(OrderSend(req, res))
+         Print("[SpreadWindow] Widened SL ticket=", ticket, " ", symbol,
+               "  orig=", currentSL, " → ", NormalizeDouble(newSL, digits));
+      else
+         Print("[SpreadWindow] Widen failed ticket=", ticket,
+               " retcode=", res.retcode, " err=", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Restore every open position's SL from its stored Global Variable  |
+//+------------------------------------------------------------------+
+void RestoreAllSLs()
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+
+      string gvName = "aurora_orig_sl_" + IntegerToString((long)ticket);
+      if(!GlobalVariableCheck(gvName)) continue;
+
+      double origSL = GlobalVariableGet(gvName);
+      GlobalVariableDel(gvName);
+
+      if(origSL == 0) continue; // Was no-SL, skip
+
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      int    digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+
+      MqlTradeRequest req; MqlTradeResult res;
+      ZeroMemory(req); ZeroMemory(res);
+      req.action   = TRADE_ACTION_SLTP;
+      req.position = ticket;
+      req.symbol   = symbol;
+      req.sl       = NormalizeDouble(origSL, digits);
+      req.tp       = PositionGetDouble(POSITION_TP);
+
+      if(OrderSend(req, res))
+         Print("[SpreadWindow] Restored SL ticket=", ticket, " ", symbol,
+               " → ", NormalizeDouble(origSL, digits));
+      else
+         Print("[SpreadWindow] Restore failed ticket=", ticket,
+               " retcode=", res.retcode, " err=", GetLastError());
    }
 }
 
