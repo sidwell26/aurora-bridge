@@ -128,7 +128,7 @@ void CheckSignals()
 
       Print("DEBUG: Line ", i, " has ", ArraySize(fields), " fields, status=", (ArraySize(fields) >= 10 ? fields[9] : "N/A"));
 
-      // Expected: timestamp,pair,direction,sl_method,sl_value,sl_multiplier,min_sl_pips,risk_reward,risk_pct,status,signal_id,action[,max_trades]
+      // Expected: timestamp,pair,direction,sl_method,sl_value,sl_multiplier,min_sl_pips,risk_reward,risk_pct,status,signal_id,action[,max_trades,magic,sl_price,tp_price]
       if(ArraySize(fields) < 12)
       {
          Print("DEBUG: Skipping line ", i, " — only ", ArraySize(fields), " fields (need 12)");
@@ -196,14 +196,15 @@ void CheckSignals()
          continue;
       }
 
-      // Check per-pair trade limit (use signal value if present, else EA input)
+      // Check per-pair trade limit — count ALL open positions on this symbol
+      // (magic-matched + unlabeled legacy), matching the server-side cron guard.
       int maxTrades = MaxTradesPerPair;
       if(ArraySize(fields) >= 13 && StringLen(fields[12]) > 0)
       {
          int signalMax = (int)StringToInteger(fields[12]);
          if(signalMax > 0) maxTrades = signalMax;
       }
-      if(maxTrades > 0 && CountOpenTradesWithMagic(symbol, signalMagic) >= maxTrades)
+      if(maxTrades > 0 && CountOpenTradesOnSymbol(symbol) >= maxTrades)
       {
          Print("Max trades per pair reached for ", symbol, " (", maxTrades, ")");
          fields[9] = "MAX_PER_PAIR";
@@ -211,17 +212,50 @@ void CheckSignals()
          continue;
       }
 
+      // Parse pre-computed SL/TP prices (fields[14], fields[15]) if present.
+      // When provided, use them directly so execution matches the signal bar's
+      // close price rather than the live bid/ask at execution time.
+      double slPriceOverride = 0;
+      double tpPriceOverride = 0;
+      if(ArraySize(fields) >= 15 && StringLen(fields[14]) > 0)
+         slPriceOverride = StringToDouble(fields[14]);
+      if(ArraySize(fields) >= 16 && StringLen(fields[15]) > 0)
+         tpPriceOverride = StringToDouble(fields[15]);
+
       // Calculate SL in pips (0 = no SL)
       double slPips = 0;
-      if(slMethod != "" && slMethod != "NONE")
+      if(slPriceOverride > 0)
+      {
+         // Use pre-computed price directly — convert to pips for ExecuteTrade
+         double point   = SymbolInfoDouble(symbol, SYMBOL_POINT);
+         int    digits  = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+         double pipSize = (digits == 3 || digits == 5) ? point * 10 : point;
+         double fillPx  = (direction == "BUY") ? SymbolInfoDouble(symbol, SYMBOL_ASK) : SymbolInfoDouble(symbol, SYMBOL_BID);
+         slPips = MathAbs(fillPx - slPriceOverride) / pipSize;
+         Print("DEBUG: SL from pre-computed price=", slPriceOverride, " → ", slPips, " pips at fill=", fillPx);
+      }
+      else if(slMethod != "" && slMethod != "NONE")
       {
          slPips = CalculateSLPips(symbol, slMethod, slValue, slMult, minSlPips, direction);
          Print("DEBUG: SL pips=", slPips, " (method=", slMethod, " value=", slValue, " mult=", slMult, ")");
          if(slPips <= 0 && AutoCalculateSL) slPips = DefaultSLPips;
       }
 
-      // Calculate TP from R:R (0 = no TP)
-      double tpPips = (slPips > 0 && rr > 0) ? slPips * rr : 0;
+      // Calculate TP in pips — use pre-computed price if available, else R:R from SL
+      double tpPips = 0;
+      if(tpPriceOverride > 0)
+      {
+         double point   = SymbolInfoDouble(symbol, SYMBOL_POINT);
+         int    digits  = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+         double pipSize = (digits == 3 || digits == 5) ? point * 10 : point;
+         double fillPx  = (direction == "BUY") ? SymbolInfoDouble(symbol, SYMBOL_ASK) : SymbolInfoDouble(symbol, SYMBOL_BID);
+         tpPips = MathAbs(fillPx - tpPriceOverride) / pipSize;
+         Print("DEBUG: TP from pre-computed price=", tpPriceOverride, " → ", tpPips, " pips at fill=", fillPx);
+      }
+      else
+      {
+         tpPips = (slPips > 0 && rr > 0) ? slPips * rr : 0;
+      }
 
       string signalId = fields[10];
       StringTrimRight(signalId);
@@ -380,6 +414,20 @@ int CountOpenTradesWithMagic(string symbol, int magic)
             PositionGetInteger(POSITION_MAGIC) == magic)
             count++;
       }
+   }
+   return count;
+}
+
+// Count ALL open positions on a symbol regardless of magic.
+// Matches the cron's max_concurrent check which counts magic-matched
+// positions + unlabeled legacy positions on the same symbol.
+int CountOpenTradesOnSymbol(string symbol)
+{
+   int count = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      if(PositionGetTicket(i) > 0 && PositionGetString(POSITION_SYMBOL) == symbol)
+         count++;
    }
    return count;
 }

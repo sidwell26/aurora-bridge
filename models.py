@@ -16,9 +16,9 @@ class Signal(BaseModel):
     direction: str      # BUY or SELL
     slMethod: Optional[str] = None
     slPips: Optional[float] = None
-    slLevel: Optional[float] = None
+    slLevel: Optional[float] = None   # absolute SL price from signal bar
     tpPips: Optional[float] = None
-    tpLevel: Optional[float] = None
+    tpLevel: Optional[float] = None   # absolute TP price from signal bar
     lotSize: Optional[float] = 0.01
     riskReward: Optional[float] = None
     riskPercent: Optional[float] = None
