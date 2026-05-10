@@ -23,6 +23,7 @@ from mt5_writer import MT5Writer
 from result_reader import ResultReader
 from health_monitor import HealthMonitor, HealthStatus
 from mt5_reporter import MT5Reporter
+from heartbeat import Heartbeat
 
 # ─── Logging setup ───────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ async def main():
         save_config(config)
 
     logger.info("═" * 50)
-    logger.info("  Aurora Bridge Agent v1.5.2")
+    logger.info("  Aurora Bridge Agent v1.6.0")
     logger.info("═" * 50)
     logger.info(f"API: {config.api_url}")
     if config.mt5_config_id:
@@ -139,6 +140,11 @@ async def main():
         mt5_config_id=config.mt5_config_id or "",
         mt5_signal_file=config.mt5_signal_file,  # same dir EA writes aurora_*.csv files to
     )
+    # Heartbeat keeps bridge_tokens.last_heartbeat_at fresh so:
+    #   1. Aurora dashboard shows "Connected" without depending on SSE staying up
+    #   2. The stale-token cleanup cron (Sundays 04:00 UTC) doesn't revoke this
+    #      agent's token after 30 quiet days
+    heartbeat = Heartbeat(config.token, config.api_url)
 
     # Start system tray
     shutdown_event = asyncio.Event()
@@ -176,6 +182,9 @@ async def main():
 
     # ── Step 4b: Start MT5 performance reporter ───────────────────────────
     await reporter.start()
+
+    # ── Step 4c: Start heartbeat ─────────────────────────────────────────
+    heartbeat.start()
 
     # ── Step 5: Start result reader (report EA execution back to API) ─────
     result_task = None
@@ -260,6 +269,7 @@ async def main():
     finally:
         receiver.stop()
         reporter.stop()
+        heartbeat.stop()
         if result_task:
             result_task.cancel()
         health.stop()
