@@ -17,6 +17,7 @@ import signal
 import sys
 
 from config_store import load_config, save_config, detect_mt5_path, install_ea
+from config_file_loader import import_config_file_if_present
 from auth_manager import AuthManager
 from signal_receiver import SignalReceiver
 from mt5_writer import MT5Writer
@@ -55,8 +56,16 @@ async def main():
                         help="Full path to terminal64.exe (needed when multiple MT5 installs are open)")
     args = parser.parse_args()
 
-    # Load config
+    # Load config (existing encrypted local store)
     config = load_config()
+
+    # Phase 9 P2 — import aurora.config.json if the user dropped one next to
+    # the .exe. Overrides the local store but is overridden by CLI flags.
+    # Priority: CLI flags > aurora.config.json > local encrypted store > defaults.
+    config, imported = import_config_file_if_present(config)
+    if imported:
+        save_config(config)
+
     if args.api_url:
         config.api_url = args.api_url
         save_config(config)
@@ -74,7 +83,7 @@ async def main():
         save_config(config)
 
     logger.info("═" * 50)
-    logger.info("  Aurora Bridge Agent v1.6.0")
+    logger.info("  Aurora Bridge Agent v1.7.0")
     logger.info("═" * 50)
     logger.info(f"API: {config.api_url}")
     if config.mt5_config_id:
